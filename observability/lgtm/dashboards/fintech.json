@@ -4,8 +4,8 @@
   "tags": ["otel-before-after"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "refresh": "30s",
-  "time": { "from": "now-30m", "to": "now" },
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
   "panels": [
     {
       "type": "text",
