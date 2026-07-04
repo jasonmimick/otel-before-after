@@ -1,0 +1,194 @@
+name: OTel Coverage Pipeline
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      reset_to_baseline:
+        description: "Reset to dogfood-v0 and re-run full instrumentation cycle"
+        type: boolean
+        default: false
+
+jobs:
+  # ── Stage 1: detect gaps ──────────────────────────────────────────────────
+  detect:
+    name: Detect OTel gaps
+    runs-on: ubuntu-latest
+    outputs:
+      has_gaps: ${{ steps.scan.outputs.has_gaps }}
+      signals_missing: ${{ steps.scan.outputs.signals_missing }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reset to baseline (if requested)
+        if: github.event.inputs.reset_to_baseline == 'true'
+        run: |
+          git fetch --tags
+          git reset --hard dogfood-v0
+          git push --force-with-lease origin main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Clone and install Pulsar
+        run: |
+          git clone https://github.com/jasonmimick/pulsar.git /tmp/pulsar
+          pip install -e /tmp/pulsar --quiet
+
+      - name: Run Pulsar scan
+        id: scan
+        env:
+          OBSCOV_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd /tmp/pulsar
+          PYTHONPATH=src python3 -m pulsar.cli scan --json > /tmp/scan.json 2>/dev/null || \
+            PYTHONPATH=src python3 -m pulsar.cli scan --json > /tmp/scan.json
+
+          python3 << 'PYEOF'
+          import json, sys, os
+
+          data = json.load(open("/tmp/scan.json"))
+          repo = os.environ.get("GITHUB_REPOSITORY", "jasonmimick/hello-otel-fintech")
+
+          gaps = [g for g in data.get("gaps", []) if g.get("resource", "") == repo]
+          signals_missing = [g["missing_signal"] for g in gaps]
+
+          has_gaps = len(gaps) > 0
+          signals_str = ",".join(sorted(set(signals_missing))) if signals_missing else "none"
+
+          print(f"Gaps found: {len(gaps)}")
+          print(f"Missing signals: {signals_str}")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"has_gaps={'true' if has_gaps else 'false'}\n")
+              f.write(f"signals_missing={signals_str}\n")
+          PYEOF
+
+      - name: Upload scan results
+        uses: actions/upload-artifact@v4
+        with:
+          name: pulsar-scan
+          path: /tmp/scan.json
+          retention-days: 7
+
+  # ── Stage 2: open instrumentation PR ──────────────────────────────────────
+  instrument:
+    name: Open OTel instrumentation PR
+    needs: detect
+    if: needs.detect.outputs.has_gaps == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Clone and install Pulsar
+        run: |
+          git clone https://github.com/jasonmimick/pulsar.git /tmp/pulsar
+          pip install -e /tmp/pulsar --quiet
+
+      - name: Download scan results
+        uses: actions/download-artifact@v4
+        with:
+          name: pulsar-scan
+          path: /tmp
+
+      - name: Propose instrumentation PR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PULSAR_ENDPOINT: ${{ secrets.PULSAR_ENDPOINT }}
+          PULSAR_INGEST_TOKEN: ${{ secrets.PULSAR_INGEST_TOKEN }}
+          TARGET_REPO: ${{ github.repository }}
+        run: |
+          cd /tmp/pulsar
+          PYTHONPATH=src python3 tools/propose_pr.py \
+            --repo "$TARGET_REPO" \
+            --scan-file /tmp/scan.json \
+            --github-token "$GITHUB_TOKEN" \
+            --pulsar-endpoint "${PULSAR_ENDPOINT:-https://pulsar-production-adcb.up.railway.app}" \
+            --ingest-token "$PULSAR_INGEST_TOKEN"
+
+  # ── Stage 3: verify signal flow (runs on every push to main after gaps fixed) ─
+  verify:
+    name: Verify signal coverage
+    runs-on: ubuntu-latest
+    # Run on push to main — checks whether signals are flowing post-instrumentation
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Wait for Vercel deployment
+        run: sleep 90
+
+      - name: Send test traffic to each route
+        env:
+          APP_URL: ${{ vars.VERCEL_APP_URL }}
+        run: |
+          BASE="${APP_URL:-https://hello-otel-fintech.vercel.app}"
+          echo "Sending traffic to $BASE"
+          # Fire each route to generate telemetry events
+          curl -sf "$BASE/api/accounts" -o /dev/null || true
+          curl -sf "$BASE/api/accounts?customerId=cust_1" -o /dev/null || true
+          curl -sf "$BASE/api/transactions?accountId=acct_001" -o /dev/null || true
+          curl -sf "$BASE/api/transfers?accountId=acct_001" -o /dev/null || true
+          curl -sf "$BASE/api/loans?applicantId=cust_1" -o /dev/null || true
+          # Give OTLP batch exporter time to flush (default batch interval is 5-30s)
+          echo "Waiting 30s for OTLP flush..."
+          sleep 30
+
+      - name: Check signal coverage in Pulsar
+        env:
+          PULSAR_ENDPOINT: ${{ secrets.PULSAR_ENDPOINT }}
+          PULSAR_INGEST_TOKEN: ${{ secrets.PULSAR_INGEST_TOKEN }}
+        run: |
+          python3 << 'PYEOF'
+          import urllib.request, json, sys, os
+
+          endpoint = os.environ.get("PULSAR_ENDPOINT", "https://pulsar-production-adcb.up.railway.app").rstrip("/")
+          token = os.environ.get("PULSAR_INGEST_TOKEN", "")
+          service = "hello-otel-fintech"
+
+          url = f"{endpoint}/api/coverage?service={service}&token={token}"
+          try:
+              req = urllib.request.Request(url)
+              resp = json.loads(urllib.request.urlopen(req, timeout=10).read())
+          except Exception as e:
+              print(f"WARNING: Could not reach Pulsar coverage API: {e}")
+              print("Skipping verification — set PULSAR_ENDPOINT and PULSAR_INGEST_TOKEN secrets to enable.")
+              sys.exit(0)
+
+          coverage = resp.get("coverage", {})
+          traces  = coverage.get("traces",  False)
+          logs    = coverage.get("logs",    False)
+          metrics = coverage.get("metrics", False)
+
+          lines = [
+              f"Service: {service}",
+              f"  Traces:  {'✓ flowing' if traces  else '✗ missing'}",
+              f"  Logs:    {'✓ flowing' if logs    else '✗ missing'}",
+              f"  Metrics: {'✓ flowing' if metrics else '✗ missing'}",
+          ]
+          for line in lines:
+              print(line)
+
+          if all([traces, logs, metrics]):
+              print("\nAll 3 signals confirmed. OTel coverage complete.")
+          else:
+              missing = [s for s, ok in [("traces", traces), ("logs", logs), ("metrics", metrics)] if not ok]
+              print(f"\nIncomplete coverage — missing: {', '.join(missing)}")
+              print("Check Pulsar template for this signal type and iterate.")
+              # Exit 1 only if Pulsar confirmed signals NOT flowing (not on API error)
+              sys.exit(1)
+          PYEOF
+
+      - name: Write coverage summary
+        if: always()
+        run: |
+          echo "## OTel Coverage — hello-otel-fintech" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Signal | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Traces | checked above |" >> $GITHUB_STEP_SUMMARY
+          echo "| Logs | checked above |" >> $GITHUB_STEP_SUMMARY
+          echo "| Metrics | checked above |" >> $GITHUB_STEP_SUMMARY

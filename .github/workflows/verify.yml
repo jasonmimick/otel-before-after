@@ -1,0 +1,43 @@
+name: verify-signals
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: before/ must have zero OTel dependencies
+        run: |
+          set -e
+          hits=$(grep -ril "opentelemetry" apps/*/before/ || true)
+          if [ -n "$hits" ]; then
+            echo "OTel references found in before/ versions:"; echo "$hits"; exit 1
+          fi
+
+      - name: compose up
+        run: docker compose up -d --build
+
+      - name: traffic
+        run: python3 harness/traffic.py --iterations 10
+
+      - name: wait for signal pipeline flush
+        run: sleep 20
+
+      - name: verify signal contract
+        run: python3 harness/verify.py --json signal-report.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: signal-report
+          path: signal-report.json
+
+      - name: logs on failure
+        if: failure()
+        run: docker compose logs --tail 50 otel-collector fintech-after

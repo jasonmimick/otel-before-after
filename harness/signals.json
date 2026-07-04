@@ -1,0 +1,15 @@
+{
+  "_comment": "Signal contract. verify.py scores every app pair against this: the after/ version must show traces (Tempo), logs (Loki), and the listed metrics (Prometheus); the before/ version must be healthy but produce NO OTel signals.",
+  "apps": {
+    "fintech": {
+      "before_url_env": "FINTECH_BEFORE_URL",
+      "after_url_env": "FINTECH_AFTER_URL",
+      "default_before_url": "http://localhost:8001",
+      "default_after_url": "http://localhost:8002",
+      "service_name": "fintech-after",
+      "before_service_name": "fintech-before",
+      "health_path": "/health",
+      "metrics": ["transfer.initiated", "transfer.completed", "loan.requested"]
+    }
+  }
+}

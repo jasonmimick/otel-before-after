@@ -1,0 +1,44 @@
+# otel-before-after — the whole suite in one command:
+#   docker compose up -d --build
+#   python3 harness/traffic.py --iterations 10
+#   python3 harness/verify.py
+#
+# Grafana: http://localhost:3000 (anonymous admin, no login)
+services:
+  lgtm:
+    image: grafana/otel-lgtm:latest
+    container_name: lgtm
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"   # Grafana UI (override: GRAFANA_PORT=3030)
+      - "3100:3100"   # Loki API (verifier)
+      - "3200:3200"   # Tempo API (verifier)
+      - "9090:9090"   # Prometheus API (verifier)
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.116.1
+    container_name: otel-collector
+    command: ["--config", "/etc/otelcol/config.yaml"]
+    volumes:
+      - ./observability/otel-collector/config.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    depends_on:
+      - lgtm
+
+  fintech-before:
+    build: ./apps/fintech/before
+    container_name: fintech-before
+    ports:
+      - "8001:8000"
+
+  fintech-after:
+    build: ./apps/fintech/after
+    container_name: fintech-after
+    environment:
+      OTEL_SERVICE_NAME: fintech-after
+      OTEL_EXPORTER_OTLP_ENDPOINT: otel-collector:4317
+    ports:
+      - "8002:8000"
+    depends_on:
+      - otel-collector
