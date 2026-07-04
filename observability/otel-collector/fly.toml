@@ -1,0 +1,14 @@
+# OTLP front door on Fly. Private-network only: after/ apps reach it at
+# otel-ba-collector.internal (4317 gRPC / 4318 HTTP).
+app = "otel-ba-collector"
+primary_region = "ord"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  LGTM_ENDPOINT = "otel-ba-lgtm.internal:4317"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

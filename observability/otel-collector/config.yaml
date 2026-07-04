@@ -13,7 +13,8 @@ processors:
 
 exporters:
   otlp/lgtm:
-    endpoint: lgtm:4317
+    # local compose default; Fly overrides via LGTM_ENDPOINT env
+    endpoint: ${env:LGTM_ENDPOINT:-lgtm:4317}
     tls:
       insecure: true
 

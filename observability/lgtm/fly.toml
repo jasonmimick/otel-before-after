@@ -1,0 +1,18 @@
+# Grafana + Tempo + Loki + Prometheus in one container.
+# Public: Grafana UI. Internal: OTLP 4317 for the collector (otel-ba-lgtm.internal).
+app = "otel-ba-lgtm"
+primary_region = "ord"
+
+[build]
+  image = "grafana/otel-lgtm:latest"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2gb"
