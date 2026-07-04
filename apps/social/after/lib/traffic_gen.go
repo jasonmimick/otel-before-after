@@ -19,11 +19,15 @@ func StartTrafficGenerator(store *Store) {
 
 	for range ticker.C {
 		action := rand.Float64()
-		if action < 0.3 {
+		if action < 0.15 {
+			simulateUserCreate(store)
+		} else if action < 0.35 {
+			simulatePostCreate(store)
+		} else if action < 0.55 {
 			simulateUsersList(store)
-		} else if action < 0.6 {
+		} else if action < 0.7 {
 			simulatePostsList(store)
-		} else if action < 0.8 {
+		} else if action < 0.85 {
 			simulateFeed(store)
 		} else {
 			simulateNotification(store)
@@ -32,6 +36,42 @@ func StartTrafficGenerator(store *Store) {
 		// Reset ticker with new random duration
 		ticker.Reset(time.Duration(3+rand.Intn(4)) * time.Second)
 	}
+}
+
+func simulateUserCreate(store *Store) {
+	ctx, span := trafficTracer.Start(context.Background(), "social.sim.user_create")
+	defer span.End()
+
+	username := fmt.Sprintf("user-%d", rand.Intn(100000))
+	user := store.CreateUser(username, username+"@example.com")
+	UserCreated.Add(ctx, 1)
+	Logger.Info(ctx, "user.created", map[string]interface{}{
+		"user_id":  user["id"],
+		"username": username,
+		"source":   "traffic_gen",
+	})
+}
+
+func simulatePostCreate(store *Store) {
+	ctx, span := trafficTracer.Start(context.Background(), "social.sim.post_create")
+	defer span.End()
+
+	users := store.GetUsers()
+	if len(users) == 0 {
+		return
+	}
+	user := users[rand.Intn(len(users))]
+	contents := []string{
+		"Hello world!", "Just shipped a new feature",
+		"Coffee o'clock", "Spans all the way down",
+	}
+	post := store.CreatePost(user["id"].(string), contents[rand.Intn(len(contents))])
+	PostCreated.Add(ctx, 1)
+	Logger.Info(ctx, "post.created", map[string]interface{}{
+		"post_id": post["id"],
+		"user_id": user["id"],
+		"source":  "traffic_gen",
+	})
 }
 
 func simulateUsersList(store *Store) {
