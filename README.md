@@ -29,6 +29,7 @@ harness/
 docker compose up -d --build
 python3 harness/traffic.py --iterations 10
 python3 harness/verify.py
+python3 harness/provision_dashboards.py   # adds the per-app Grafana dashboards
 ```
 
 Then open **Grafana → http://localhost:3000** (no login):
