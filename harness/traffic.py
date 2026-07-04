@@ -60,7 +60,52 @@ def fintech_flow(base):
     call("GET", f"{base}/api/transactions")
 
 
-FLOWS = {"fintech": fintech_flow}
+def social_flow(base):
+    # Go handlers decode JSON bodies, not query params
+    username = f"user-{random.randint(1, 1000)}"
+    call("POST", f"{base}/api/users", body={
+        "username": username,
+        "email": f"{username}@example.com",
+    })
+    call("POST", f"{base}/api/posts", body={
+        "user_id": f"u{random.randint(1, 3)}",
+        "content": random.choice([
+            "Hello world!", "Just shipped a new feature",
+            "Coffee o'clock", "Anyone else seeing this?",
+        ]),
+    })
+    call("GET", f"{base}/api/feed")
+    call("GET", f"{base}/api/users")
+    call("GET", f"{base}/api/posts")
+    call("POST", f"{base}/api/notifications", body={
+        "user_id": f"u{random.randint(1, 3)}",
+        "message": random.choice([
+            "You have a new like", "Someone replied to you", "New follower",
+        ]),
+    })
+
+
+def ecommerce_flow(base):
+    cart_id = f"cart-{random.randint(1, 100000)}"
+    customer_id = f"customer-{random.randint(1, 1000)}"
+    call("GET", f"{base}/api/products")
+    call("PUT", f"{base}/api/cart", body={
+        "cartId": cart_id,
+        "productId": f"p{random.randint(1, 8)}",
+        "quantity": random.randint(1, 3),
+    })
+    call("POST", f"{base}/api/checkout", body={
+        "cartId": cart_id,
+        "customerId": customer_id,
+    })
+    call("POST", f"{base}/api/orders", body={
+        "customerId": customer_id,
+        "items": [{"productId": f"p{random.randint(1, 8)}", "quantity": 1}],
+    })
+    call("GET", f"{base}/api/orders", params={"customerId": customer_id})
+
+
+FLOWS = {"fintech": fintech_flow, "social": social_flow, "ecommerce": ecommerce_flow}
 
 
 def load_targets():

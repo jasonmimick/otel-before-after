@@ -1,0 +1,23 @@
+# Standalone: just this app pair + the LGTM backend (no separate collector —
+# after/ exports OTLP straight to lgtm here; the root compose shows the
+# collector-first topology).
+services:
+  lgtm:
+    image: grafana/otel-lgtm:latest
+    ports:
+      - "3000:3000"
+
+  social-before:
+    build: ./before
+    ports:
+      - "8023:8080"
+
+  social-after:
+    build: ./after
+    environment:
+      OTEL_SERVICE_NAME: social-after
+      OTEL_EXPORTER_OTLP_ENDPOINT: lgtm:4317
+    ports:
+      - "8022:8080"
+    depends_on:
+      - lgtm

@@ -42,3 +42,37 @@ services:
       - "8002:8000"
     depends_on:
       - otel-collector
+
+  social-before:
+    build: ./apps/social/before
+    container_name: social-before
+    ports:
+      - "8023:8080"
+
+  social-after:
+    build: ./apps/social/after
+    container_name: social-after
+    environment:
+      OTEL_SERVICE_NAME: social-after
+      OTEL_EXPORTER_OTLP_ENDPOINT: otel-collector:4317
+    ports:
+      - "8022:8080"
+    depends_on:
+      - otel-collector
+
+  ecommerce-before:
+    build: ./apps/ecommerce/before
+    container_name: ecommerce-before
+    ports:
+      - "8011:3000"
+
+  ecommerce-after:
+    build: ./apps/ecommerce/after
+    container_name: ecommerce-after
+    environment:
+      OTEL_SERVICE_NAME: ecommerce-after
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    ports:
+      - "8012:3000"
+    depends_on:
+      - otel-collector

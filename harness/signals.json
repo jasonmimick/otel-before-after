@@ -10,6 +10,26 @@
       "before_service_name": "fintech-before",
       "health_path": "/health",
       "metrics": ["transfer.initiated", "transfer.completed", "loan.requested"]
+    },
+    "social": {
+      "before_url_env": "SOCIAL_BEFORE_URL",
+      "after_url_env": "SOCIAL_AFTER_URL",
+      "default_before_url": "http://localhost:8023",
+      "default_after_url": "http://localhost:8022",
+      "service_name": "social-after",
+      "before_service_name": "social-before",
+      "health_path": "/health",
+      "metrics": ["user.created", "post.created", "feed.fetched"]
+    },
+    "ecommerce": {
+      "before_url_env": "ECOMMERCE_BEFORE_URL",
+      "after_url_env": "ECOMMERCE_AFTER_URL",
+      "default_before_url": "http://localhost:8011",
+      "default_after_url": "http://localhost:8012",
+      "service_name": "ecommerce-after",
+      "before_service_name": "ecommerce-before",
+      "health_path": "/api/health",
+      "metrics": ["checkout_attempts_total", "orders_created_total", "cart_updates_total"]
     }
   }
 }

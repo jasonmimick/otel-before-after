@@ -8,7 +8,8 @@ Read this before touching any app. It is the contract that keeps the pairs hones
 - run standalone with zero OpenTelemetry packages, imports, or env vars
 - emit structured JSON business events to stdout:
   `{"timestamp","level","event","traceId","spanId","fields"}`
-- expose `GET /health` (200 JSON) and `GET /metrics` (in-memory JSON counters)
+- expose `GET /health` (200 JSON) and in-memory JSON counters at
+  `GET /metrics` or `GET /api/metrics` (whichever is idiomatic for the stack)
 - be a *good app* someone could copy as a starting point — incomplete
   observability is the point; bad code is not
 
@@ -29,7 +30,7 @@ Read this before touching any app. It is the contract that keeps the pairs hones
 | OTLP gRPC / HTTP (collector) | 4317 / 4318 |
 | fintech before / after | 8001 / 8002 |
 | ecommerce before / after | 8011 / 8012 |
-| social before / after | 8021 / 8022 |
+| social before / after | 8023 / 8022 |
 | dashboard | 8080 |
 
 Inside containers every app listens on its natural port (FastAPI 8000,

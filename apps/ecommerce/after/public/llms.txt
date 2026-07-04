@@ -1,0 +1,44 @@
+# hello-otel-ecommerce
+
+hello-otel-ecommerce is a mock e-commerce service (product catalog, carts,
+checkout with fraud/payment/shipment simulation, orders, inventory) that serves
+as the CNCF reference OpenTelemetry implementation in the hello-otel suite. It
+exports all three OTel signals — traces, metrics, and logs — over OTLP/HTTP
+(default endpoint http://localhost:4318), with business log records correlated
+to the active trace. A machine-readable manifest is available at /api/agent.
+
+## Endpoints
+
+- GET  /                    Live observability dashboard
+- GET  /health              Health check ({"status":"ok"})
+- GET  /api/health          Health check alias
+- GET  /api/products        List products (optional ?category=)
+- GET  /api/products/{id}   Get a single product
+- GET  /api/cart?cartId=    Get a cart
+- PUT  /api/cart            Upsert cart item {cartId, productId, quantity}
+- POST /api/checkout        Checkout {cartId, customerId}
+- GET  /api/orders          List orders (optional ?customerId=)
+- POST /api/orders          Create order {customerId, items[]}
+- GET  /api/orders/{id}     Get a single order
+- GET  /api/inventory       Inventory health report
+- GET  /api/metrics         Business metrics snapshot (JSON)
+- GET  /api/events          Recent business events (ring buffer, ?limit=)
+- GET  /api/traffic         Generate one burst of demo traffic
+- GET  /api/agent           JSON agent manifest
+- GET  /llms.txt            This file
+
+## OpenTelemetry signals
+
+Traces: auto-instrumented HTTP spans (@opentelemetry/auto-instrumentations-node)
+Logs:   business events (checkout.started, fraud.check, checkout.declined,
+        payment.failed, checkout.completed, cart.get, cart.updated,
+        orders.list, order.created, products.list, inventory.report)
+Metrics (instrument names == /api/metrics JSON keys):
+        checkout_attempts_total
+        checkout_fraud_declines_total
+        payment_failures_total
+        cart_updates_total
+        orders_created_total
+        checkout_value_usd (histogram, USD)
+
+Health path: /health
